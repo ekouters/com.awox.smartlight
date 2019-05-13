@@ -1,0 +1,60 @@
+{
+  "id": "com.awox.smartlight",
+  "version": "0.0.1",
+  "compatibility": ">=2.1.2",
+  "sdk": 2,
+  "name": {
+    "en": "AwoX SmartLIGHT"
+  },
+  "description": {
+    "en": "Adds support for AwoX SmartLIGHT devices."
+  },
+  "category": [
+    "lights"
+  ],
+  "permissions": [
+      "homey:wireless:ble"
+  ],
+  "images": {
+    "large": "/assets/images/large.png",
+    "small": "/assets/images/small.png"
+  },
+  "author": {
+    "name": "Erik Kouters",
+    "email": "erikkouters@gmail.com"
+  },
+  "drivers": [
+    {
+      "id": "esmlm-c5-e14",
+      "name": {
+        "en": "ESMLm-c5-E14"
+      },
+      "class": "light",
+      "capabilities": [
+        "light_saturation",
+        "light_temperature",
+        "dim",
+        "light_hue",
+        "light_mode",
+        "onoff"
+      ],
+	  "pair": [
+		  {
+			  "id": "list_devices",
+			  "template": "list_devices",
+			  "navigation": {
+				  "next": "add_devices"
+			  }
+		  },
+		  {
+			  "id": "add_devices",
+			  "template": "add_devices"
+		  }
+	  ],
+      "images": {
+        "large": "/drivers/esmlm-c5-e14/assets/images/large.png",
+        "small": "/drivers/esmlm-c5-e14/assets/images/small.png"
+      }
+    }
+  ]
+}
