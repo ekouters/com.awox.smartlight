@@ -61,21 +61,23 @@ const COMMAND_CHAR_UUID = '000102030405060708090a0b0c0d1912'; //properties=read,
 const OTA_CHAR_UUID = '000102030405060708090a0b0c0d1913';     //properties=read,writeWithoutResponse             <Buffer e0 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00>
 const PAIR_CHAR_UUID = '000102030405060708090a0b0c0d1914';    //properties=read,write                            <Buffer 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00>
 
+var LightModeEnum = {"color":1, "temperature":2};
+
 const Homey = require('homey');
 const packetutils = require('../../lib/packetutils.js');
 const CryptoJS = require('crypto-js');
 const ColorConvert = require('color-convert');
 
 class AwoxSmartlightDevice extends Homey.Device {
-	
-	onInit() {
-		this.log('AwoxSmartlightDevice has been inited');
+
+    onInit() {
+        this.log('AwoxSmartlightDevice has been inited');
 
         this.log(this.getData());
 
         var connected = this.connectService();
 
-		this.registerCapabilityListener('onoff', ( value, opts ) => {
+        this.registerCapabilityListener('onoff', ( value, opts ) => {
             this.log(`on/off requested: ${value}`);
             if (value)
             {
@@ -94,29 +96,38 @@ class AwoxSmartlightDevice extends Homey.Device {
                     });
             }
             return Promise.resolve(true);
-		});
-		this.registerCapabilityListener('dim', async (value) => {
-			try {
-				this.log(`dim requested: ${value}`);
-                // Map value from [0.0 - 1.0] to [0xa - 0x64] / [10 - 100]
-                var val = 10.0 + (value * 90.0);
-                this.log("Setting brightness:", val);
-                this.setColorBrightness(val)
-                    .catch( err => {
-                        console.error(err);
-                        return Promise.reject(error);
-                    });
-                    
-				return Promise.resolve(true);
-			} catch (error) {
-				return Promise.reject(error);
-			}
-		});
+        });
+
+        this.registerCapabilityListener('dim', async (value) => {
+            try {
+                this.log(`dim requested: ${value}`);
+                if (this.light_mode == LightModeEnum.color)
+                {
+                    this.setColorBrightness(value)
+                        .catch( err => {
+                            console.error(err);
+                            return Promise.reject(error);
+                        });
+                }
+                else
+                {
+                    this.setWhiteBrightness(value)
+                        .catch( err => {
+                            console.error(err);
+                            return Promise.reject(error);
+                        });
+                }
+
+                return Promise.resolve(true);
+            } catch (error) {
+                return Promise.reject(error);
+            }
+        });
 
         this.registerMultipleCapabilityListener(['light_hue', 'light_saturation'], async (valueObj) => {
-			try {
-				this.log(`hue requested: ${valueObj.light_hue}`);
-				this.log(`saturation requested: ${valueObj.light_saturation}`);
+            try {
+                this.log(`hue requested: ${valueObj.light_hue}`);
+                this.log(`saturation requested: ${valueObj.light_saturation}`);
 
                 // Map value from Hue[0.0 - 1.0] to Hue[0 - 360] (degrees)
                 // Map value from Saturation[0.0 - 1.0] to Saturation[0 - 100] (percent)
@@ -129,13 +140,65 @@ class AwoxSmartlightDevice extends Homey.Device {
                         console.error(err);
                         return Promise.reject(error);
                     });
-                    
-				return Promise.resolve(true);
-			} catch (error) {
-				return Promise.reject(error);
-			}
+
+                return Promise.resolve(true);
+            } catch (error) {
+                return Promise.reject(error);
+            }
         }, 500);
-	}
+
+        this.registerCapabilityListener('light_mode', async (value) => {
+            try {
+                this.log(`light_mode requested: ${value}`);
+                if (value == "color")
+                {
+                    this.light_mode = LightModeEnum.color;
+
+                    // When switching to color, get the Dim value and set it to the ColorBrightness
+                    var dimVal = await this.getCapabilityValue("dim");
+                    this.setColorBrightness(dimVal)
+                        .catch( err => {
+                            console.error(err);
+                            return Promise.reject(error);
+                        });
+                }
+                else if (value == "temperature")
+                {
+                    this.light_mode = LightModeEnum.temperature;
+
+                    // When switching to temperature, get the Dim value and set it to the WhiteBrightness
+                    var dimVal = await this.getCapabilityValue("dim");
+                    this.setWhiteBrightness(dimVal)
+                        .catch( err => {
+                            console.error(err);
+                            return Promise.reject(error);
+                        });
+                }
+                else
+                {
+                    return Promise.reject("light_mode: Unknown value received (expected color/temperature): " + value);
+                }
+
+                return Promise.resolve(true);
+            } catch (error) {
+                return Promise.reject(error);
+            }
+        });
+
+        this.registerCapabilityListener('light_temperature', async (value) => {
+            try {
+                this.log(`light_temperature requested: ${value}`);
+                this.setWhiteTemperature(value)
+                    .catch( err => {
+                        console.error(err);
+                        return Promise.reject(error);
+                    });
+                return Promise.resolve(true);
+            } catch (error) {
+                return Promise.reject(error);
+            }
+        });
+    }
 
     async ensureConnected()
     {
@@ -145,7 +208,7 @@ class AwoxSmartlightDevice extends Homey.Device {
         }
     }
 
-	// Turns the light on.
+    // Turns the light on.
     async turnOn()
     {
         try {
@@ -168,7 +231,7 @@ class AwoxSmartlightDevice extends Homey.Device {
         }
     }
 
-	// Turns the light off.
+    // Turns the light off.
     async turnOff()
     {
         try {
@@ -191,11 +254,11 @@ class AwoxSmartlightDevice extends Homey.Device {
         }
     }
 
-	// Args:
-	//     command: The command, as a number.
-	//     data: The parameters for the command, as bytes.
-	//     dest: The destination mesh id, as a number. If None, this lightbulb's
-	//         mesh id will be used.
+    // Args:
+    //     command: The command, as a number.
+    //     data: The parameters for the command, as bytes.
+    //     dest: The destination mesh id, as a number. If None, this lightbulb's
+    //         mesh id will be used.
     async writeCommand (command, data, dest)
     {
         var cmdPacket = packetutils.make_command_packet (this.session_key, this.mac, dest, command, data);
@@ -205,8 +268,8 @@ class AwoxSmartlightDevice extends Homey.Device {
         await this.bleService.write(COMMAND_CHAR_UUID, cmdPacket);
     }
 
-	// Args :
-	//     red, green, blue: between 0 and 0xff
+    // Args :
+    //     red, green, blue: between 0 and 0xff
     async setColor(red, green, blue)
     {
         var colorBuf = Buffer.alloc(4);
@@ -217,20 +280,23 @@ class AwoxSmartlightDevice extends Homey.Device {
 
         await this.writeCommand(C_COLOR, colorBuf, 0);
     }
-    
-	// Args :
-	//     brightness: a value between 0xa and 0x64 ...
+
+    // Args :
+    //     brightness: a value between 0xa and 0x64 ...
     async setColorBrightness(brightness)
     {
+        // Map value from [0.0 - 1.0] to [0xa - 0x64] / [10 - 100]
+        var val = 10.0 + (brightness * 90.0);
+
         var brightnessBuf = Buffer.alloc(1);
-        brightnessBuf.writeUInt8(brightness, 0);
+        brightnessBuf.writeUInt8(val, 0);
 
         await this.writeCommand(C_COLOR_BRIGHTNESS, brightnessBuf, 0);
     }
 
-	// Set a preset color sequence.
-	// Args :
-	//     num: number between 0 and 6
+    // Set a preset color sequence.
+    // Args :
+    //     num: number between 0 and 6
     async setPreset(presetNum)
     {
         var presetBuf = Buffer.alloc(1);
@@ -239,39 +305,49 @@ class AwoxSmartlightDevice extends Homey.Device {
         await this.writeCommand(C_PRESET, presetBuf, 0);
     }
 
-	// Args:
-	//     duration: in milliseconds.
+    // Args:
+    //     duration: in milliseconds.
     async setSequenceFadeDuration(duration)
     {
         var durationBuf = Buffer.alloc(4);
         durationBuf.writeInt32LE( duration, 0 );
-        
+
         await this.writeCommand(C_SEQUENCE_FADE_DURATION, durationBuf, 0);
     }
 
-	// Args :
-	//     duration: in milliseconds.
+    // Args :
+    //     duration: in milliseconds.
     async setSequenceColorDuration(duration)
     {
         var durationBuf = Buffer.alloc(4);
         durationBuf.writeInt32LE( duration, 0 );
-        
+
         await this.writeCommand(C_SEQUENCE_COLOR_DURATION, durationBuf, 0);
     }
 
-	// Args :
-	//     temp: between 0 and 0x7f
-	//     brightness: between 1 and 0x7f
-	async setWhite (temp, brightness)
-	{
+    // Args :
+    //     temp: between 0 and 0x7f
+    async setWhiteTemperature (temp)
+    {
+        // Map value from [0.0 - 1.0] to [0x0 - 0x7f] / [0 - 127]
+        var val = (temp * 127.0);
+
         var whiteTempBuf = Buffer.alloc(1);
-        whiteTempBuf.writeUInt8(temp, 0);
+        whiteTempBuf.writeUInt8(val, 0);
         await this.writeCommand(C_WHITE_TEMPERATURE, whiteTempBuf, 0);
+    }
+
+    // Args :
+    //     brightness: between 1 and 0x7f
+    async setWhiteBrightness (brightness)
+    {
+        // Map value from [0.0 - 1.0] to [0x01 - 0x7f] / [1 - 127]
+        var val = 1.0 + (brightness * 126.0);
 
         var whiteBrightnessBuf = Buffer.alloc(1);
-        whiteBrightnessBuf.writeUInt8(temp, 0);
+        whiteBrightnessBuf.writeUInt8(val, 0);
         await this.writeCommand(C_WHITE_BRIGHTNESS, whiteBrightnessBuf, 0);
-	}
+    }
 
     async connectService() {
 
@@ -329,7 +405,7 @@ class AwoxSmartlightDevice extends Homey.Device {
 
                 //await this.setColor(0x00, 0x00, 0xFF);
                 //await this.setColorBrightness(0x30);
-                
+
                 //await this.setPreset(0);
                 //await this.setSequenceFadeDuration(10);
                 //await this.setSequenceColorDuration(10);
@@ -366,13 +442,13 @@ class AwoxSmartlightDevice extends Homey.Device {
     }
 
 
-	// Sets or changes the mesh network settings.
-	// Args :
-	//     new_mesh_name: The new mesh name as a string, 16 bytes max.
-	//     new_mesh_password: The new mesh password as a string, 16 bytes max.
-	//     new_mesh_long_term_key: The new long term key as a string, 16 bytes max.
-	// Returns :
-	//     True on success.
+    // Sets or changes the mesh network settings.
+    // Args :
+    //     new_mesh_name: The new mesh name as a string, 16 bytes max.
+    //     new_mesh_password: The new mesh password as a string, 16 bytes max.
+    //     new_mesh_long_term_key: The new long term key as a string, 16 bytes max.
+    // Returns :
+    //     True on success.
     async setMesh (new_mesh_name, new_mesh_password, new_mesh_long_term_key)
     {
         // Write the mesh_name packet
@@ -410,9 +486,9 @@ class AwoxSmartlightDevice extends Homey.Device {
         }
     }
 
-	// Sets the mesh id.
-	// Args :
-	//     mesh_id: as a number.
+    // Sets the mesh id.
+    // Args :
+    //     mesh_id: as a number.
     async setMeshId (mesh_id)
     {
         var msg = Buffer.alloc(2);
@@ -422,14 +498,14 @@ class AwoxSmartlightDevice extends Homey.Device {
         return Promise.resolve(true);
     }
 
-	// Restores the default name and password. Will disconnect the device.
+    // Restores the default name and password. Will disconnect the device.
     async resetMesh()
     {
         var msg = Buffer.alloc(1);
         this.writeCommand(C_MESH_RESET, msg, 0);
         return Promise.resolve(true);
     }
-	
+
 }
 
 module.exports = AwoxSmartlightDevice;

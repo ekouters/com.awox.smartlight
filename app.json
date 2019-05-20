@@ -25,9 +25,9 @@
   },
   "drivers": [
     {
-      "id": "esmlm-c5-e14",
+      "id": "awox-smartlight",
       "name": {
-        "en": "ESMLm-c5-E14"
+        "en": "AwoX SmartLIGHT"
       },
       "class": "light",
       "capabilities": [
@@ -52,8 +52,8 @@
 		  }
 	  ],
       "images": {
-        "large": "/drivers/esmlm-c5-e14/assets/images/large.png",
-        "small": "/drivers/esmlm-c5-e14/assets/images/small.png"
+        "large": "/drivers/awox-smartlight/assets/images/large.png",
+        "small": "/drivers/awox-smartlight/assets/images/small.png"
       }
     }
   ]

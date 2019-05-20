@@ -13,27 +13,27 @@ const BLE_CHARACTERISTICS_MANUFACTURER_Name_STRING = '2a29';
 const Homey = require('homey');
 
 class AwoxSmartlightDriver extends Homey.Driver {
-	
-	onInit() {
-		this.log('AwoxSmartlightDriver has been inited');
-	}
 
-	onPairListDevices(data, callback) {
-		this.log('pair listing of devices started');
-		this.discoverLights()
-			.then((deviceList) => {
-				callback(null, deviceList);
-			})
-		.catch((error) => {
-			callback(error);
-		});
-	}
+    onInit() {
+        this.log('AwoxSmartlightDriver has been inited');
+    }
 
-	async discoverLights() {
-		this.log('device discovery started');
-		try {
-			// discover all peripherals that have AwoX Company Identifier (0x0160)
-			const bleAdvertisements = await Homey.ManagerBLE.discover();
+    onPairListDevices(data, callback) {
+        this.log('pair listing of devices started');
+        this.discoverLights()
+            .then((deviceList) => {
+                callback(null, deviceList);
+            })
+        .catch((error) => {
+            callback(error);
+        });
+    }
+
+    async discoverLights() {
+        this.log('device discovery started');
+        try {
+            // discover all peripherals that have AwoX Company Identifier (0x0160)
+            const bleAdvertisements = await Homey.ManagerBLE.discover();
 
             var awoxLights = [];
             for (var i = 0; i < bleAdvertisements.length; i++)
@@ -65,7 +65,7 @@ class AwoxSmartlightDriver extends Homey.Driver {
                     model_number = model_number.toString('utf-8').replace(/\0/g, '');
                     hardware_revision = hardware_revision.toString('utf-8').replace(/\0/g, '');
 
-            	    const device = {
+                    const device = {
                         name: manufacturer_name + " " + device_name + " (" + bleAdvertisements[i].uuid + ")",
                         data:
                         {
@@ -81,13 +81,13 @@ class AwoxSmartlightDriver extends Homey.Driver {
                     await blePeripheral.disconnect();
                 }
             }
-			return Promise.resolve(awoxLights);
-		} catch (error) {
+            return Promise.resolve(awoxLights);
+        } catch (error) {
             await blePeripheral.disconnect();
-			return Promise.reject(error);
-		}
-	}
-	
+            return Promise.reject(error);
+        }
+    }
+
 }
 
 module.exports = AwoxSmartlightDriver;
