@@ -68,14 +68,16 @@ const packetutils = require('../../lib/packetutils.js');
 const CryptoJS = require('crypto-js');
 const ColorConvert = require('color-convert');
 
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 class AwoxSmartlightDevice extends Homey.Device {
 
     onInit() {
         this.log('AwoxSmartlightDevice has been inited');
 
         this.log(this.getData());
-
-        var connected = this.connectService();
 
         this.registerCapabilityListener('onoff', ( value, opts ) => {
             this.log(`on/off requested: ${value}`);
@@ -198,11 +200,40 @@ class AwoxSmartlightDevice extends Homey.Device {
                 return Promise.reject(error);
             }
         });
+
+    }
+
+    onAdded()
+    {
+        var connected = this.connectService()
+            .then(async () => {
+                this.log("Device paired. Setting mesh user/pass...");
+                await this.setMesh("unpaired", "1234", "Homey");
+                this.log("Mesh set.");
+                return Promise.resolve(true);
+            })
+            .catch((error) => {
+                return Promise.reject(error);
+            });
+    }
+
+    onDeleted()
+    {
+        this.log("Deleting device...");
+        this.resetMesh();
+        this.log("Mesh resetted");
     }
 
     async ensureConnected()
     {
-        if (!this.blePeripheral.isConnected)
+        if (typeof this.blePeripheral !== 'undefined')
+        {
+            if (!this.blePeripheral.isConnected)
+            {
+                await this.connectService();
+            }
+        }
+        else
         {
             await this.connectService();
         }
@@ -212,11 +243,6 @@ class AwoxSmartlightDevice extends Homey.Device {
     async turnOn()
     {
         try {
-
-            this.log("[turnOn] isConnected before:", this.blePeripheral.isConnected);
-            await this.ensureConnected();
-            this.log("[turnOn] isConnected after:", this.blePeripheral.isConnected);
-
             // write command 'on' to the peripheral
             var onBuf = Buffer.alloc(1);
             onBuf.writeUInt8(0x01, 0);
@@ -235,11 +261,6 @@ class AwoxSmartlightDevice extends Homey.Device {
     async turnOff()
     {
         try {
-
-            this.log("[turnOff] isConnected before:", this.blePeripheral.isConnected);
-            await this.ensureConnected();
-            this.log("[turnOff] isConnected after:", this.blePeripheral.isConnected);
-
             // write command 'off' to the peripheral
             var offBuf = Buffer.alloc(1);
             offBuf.writeUInt8(0x00, 0);
@@ -261,6 +282,8 @@ class AwoxSmartlightDevice extends Homey.Device {
     //         mesh id will be used.
     async writeCommand (command, data, dest)
     {
+        await this.ensureConnected();
+
         var cmdPacket = packetutils.make_command_packet (this.session_key, this.mac, dest, command, data);
         this.log ("Writing command=", command, " ; data=", data);
 
@@ -376,6 +399,8 @@ class AwoxSmartlightDevice extends Homey.Device {
 
             this.log("connected to blePeripheral");
 
+            await sleep(100);
+
             this.bleService = await this.blePeripheral.getService(SERVICE_CHAR_UUID); 
 
             this.log("got service from blePeripheral");
@@ -455,6 +480,7 @@ class AwoxSmartlightDevice extends Homey.Device {
         var mesh_name_bytecode = Buffer.from("04", "hex");
         var mesh_name_packet = packetutils.encrypt( this.session_key, new_mesh_name );
         var msg = Buffer.concat( [mesh_name_bytecode, mesh_name_packet] );
+        this.log("mesh_name:", msg);
         await this.bleService.write(PAIR_CHAR_UUID, msg);
 
         // Write the mesh_password packet
@@ -469,8 +495,16 @@ class AwoxSmartlightDevice extends Homey.Device {
         msg = Buffer.concat( [mesh_long_term_key_bytecode, mesh_long_term_key_packet] );
         await this.bleService.write(PAIR_CHAR_UUID, msg);
 
+        // Status packet to PAIR with lamp
+        var statusPacket = Buffer.from("01", "hex");
+        // Write status packet to the STATUS char content
+        await this.bleService.write(STATUS_CHAR_UUID, statusPacket);
+
+        await sleep(1000);
+
         // Get the PAIR characteristic content
         var pairCharData = await this.bleService.read(PAIR_CHAR_UUID);
+        this.log("pairCharData", pairCharData);
 
         if (pairCharData[0] == 0x07)
         {
@@ -481,7 +515,10 @@ class AwoxSmartlightDevice extends Homey.Device {
         }
         else
         {
+            this.log(pairCharData);
             this.log("Mesh network settings change failed:", pairCharData);
+            var message = packetutils.decrypt_packet (this.session_key, this.mac, pairCharData);
+            this.log("Received message : ", message)
             return Promise.resolve(false);
         }
     }

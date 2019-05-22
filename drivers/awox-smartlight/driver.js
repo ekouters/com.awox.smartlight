@@ -12,6 +12,10 @@ const BLE_CHARACTERISTICS_MANUFACTURER_Name_STRING = '2a29';
 
 const Homey = require('homey');
 
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 class AwoxSmartlightDriver extends Homey.Driver {
 
     onInit() {
@@ -45,9 +49,13 @@ class AwoxSmartlightDriver extends Homey.Driver {
                     this.log("Connecting to an AwoX device...");
                     // Connect to the BLE device
                     var blePeripheral = await bleAdvertisements[i].connect();
+                    this.log("Connected to an AwoX device...");
+
+                    await sleep(100);
 
                     // Discover everything after connecting to the BLE device
                     await blePeripheral.discoverAllServicesAndCharacteristics();
+                    this.log("Discovered an AwoX device...");
 
                     // Get device info
                     var device_name = await blePeripheral.read(BLE_SERVICES_GENERIC_ACCESS, BLE_CHARACTERISTICS_DEVICE_NAME);
